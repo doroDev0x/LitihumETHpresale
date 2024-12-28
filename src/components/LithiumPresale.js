@@ -9,7 +9,13 @@ import {
   Divider,
   Progress,
   Image,
+  Switch,
+  FormControl,
+  FormLabel,
+  Flex,
+  Spacer,
 } from "@chakra-ui/react";
+import { FaEthereum } from "react-icons/fa"; // Importa el ícono de Ethereum
 import { presaleAbi } from "../contracts/presale";
 import {
   useAccount,
@@ -17,12 +23,13 @@ import {
   useReadContract,
 } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
-import { parseEther, formatEther, formatUnits } from "viem";
+import { parseEther, formatEther } from "viem";
 
 const LithiumPresale = ({ onStake }) => {
   const [amount, setAmount] = useState("");
   const [lithiumToReceive, setLithiumToReceive] = useState("");
   const [isClient, setIsClient] = useState(false);
+  const [currency, setCurrency] = useState("BNB"); // Estado para la moneda seleccionada
   const { open } = useWeb3Modal();
   const { address } = useAccount();
 
@@ -39,22 +46,32 @@ const LithiumPresale = ({ onStake }) => {
   };
 
   const handleAmountChange = (e) => {
-    const bnbAmount = parseFloat(e.target.value) || 0;
+    const inputAmount = parseFloat(e.target.value) || 0;
     setAmount(e.target.value);
-  
-    if (bnbAmount > 0 && getLatestPriceBNB && priceUsdtResult) {
+
+    let priceInUsd;
+    if (currency === "BNB" && getLatestPriceBNB && priceUsdtResult) {
       const bnbPriceInUsd = Number(formatEther(getLatestPriceBNB));
       const lithiumPriceInUsd = Number(formatEther(priceUsdtResult));
-      const tokens = (bnbAmount * bnbPriceInUsd) / lithiumPriceInUsd;
-  
-      setLithiumToReceive(tokens.toFixed(2)); // Ajusta la precisión según sea necesario
+      priceInUsd = bnbPriceInUsd;
+      const tokens = (inputAmount * bnbPriceInUsd) / lithiumPriceInUsd;
+      setLithiumToReceive(tokens.toFixed(2));
+    } else if (currency === "ETH" && getLatestPriceETH && priceUsdtResult) {
+      const ethPriceInUsd = Number(formatEther(getLatestPriceETH));
+      const lithiumPriceInUsd = Number(formatEther(priceUsdtResult));
+      priceInUsd = ethPriceInUsd;
+      const tokens = (inputAmount * ethPriceInUsd) / lithiumPriceInUsd;
+      setLithiumToReceive(tokens.toFixed(2));
     } else {
       setLithiumToReceive("0.00");
     }
   };
-  
+
   const presaleContractInfo = {
-    address: process.env.NEXT_PUBLIC_PRESALE_CONTRACT_BSC_TESTNET,
+    address:
+      currency === "BNB"
+        ? process.env.NEXT_PUBLIC_PRESALE_CONTRACT_BSC_TESTNET
+        : process.env.NEXT_PUBLIC_PRESALE_CONTRACT_ETH_MAINNET, // Asegúrate de definir esta variable en tus variables de entorno
     abi: presaleAbi,
   };
 
@@ -70,16 +87,18 @@ const LithiumPresale = ({ onStake }) => {
 
   const { data: getLatestPriceBNB } = useReadContract({
     ...presaleContractInfo,
-    functionName: "getLatestPrice",
+    functionName: "getLatestPriceBNB", // Asegúrate de que esta función exista en tu contrato
+  });
+
+  const { data: getLatestPriceETH } = useReadContract({
+    ...presaleContractInfo,
+    functionName: "getLatestPriceETH", // Asegúrate de que esta función exista en tu contrato
   });
 
   const { data: priceUsdtResult } = useReadContract({
     ...presaleContractInfo,
     functionName: "pricePerLithiumUSD",
   });
-
-  const conversionRate = 0.2;
-
 
   const { data: isClaimEnabled } = useReadContract({
     ...presaleContractInfo,
@@ -92,20 +111,32 @@ const LithiumPresale = ({ onStake }) => {
   });
 
   const { writeContract: writeBuyTokensWithEth } = useWriteContract();
+  const { writeContract: writeBuyTokensWithBnb } = useWriteContract(); // Función para BNB
 
-  // Calculate the price of Lithium in USD
-  const lithiumPriceUsd = priceUsdtResult ? Number(formatEther(priceUsdtResult)) : 0;
+  // Calcular el precio de Lithium en USD
+  const lithiumPriceUsd = priceUsdtResult
+    ? Number(formatEther(priceUsdtResult))
+    : 0;
 
-  // Calculate the total number of tokens sold
+  // Calcular el total de tokens vendidos
   const soldTokens = tokensSold ? Number(formatEther(tokensSold)) : 0;
 
-  // Calculate the total raised in USD (cap at totalLithiumsForSale * pricePerLithiumUSD)
-  const maxUsdRaised = totalLithiumsForSale ? Number(formatEther(totalLithiumsForSale)) * lithiumPriceUsd : 0;
+  // Calcular el total recaudado en USD (capped)
+  const maxUsdRaised = totalLithiumsForSale
+    ? Number(formatEther(totalLithiumsForSale)) * lithiumPriceUsd
+    : 0;
   const usdRaisedFromSold = soldTokens * lithiumPriceUsd;
   const totalUsdRaised = Math.min(baseUsdRaised + usdRaisedFromSold, maxUsdRaised);
 
-  // Calculate the progress percentage based on tokens sold
-  const raisedPercentage = maxUsdRaised > 0 ? (totalUsdRaised / maxUsdRaised) * 100 : 0;
+  // Calcular el porcentaje de progreso
+  const raisedPercentage =
+    maxUsdRaised > 0 ? (totalUsdRaised / maxUsdRaised) * 100 : 0;
+
+  const handleCurrencyToggle = () => {
+    setCurrency((prev) => (prev === "BNB" ? "ETH" : "BNB"));
+    setAmount("");
+    setLithiumToReceive("0.00");
+  };
 
   return (
     <Box
@@ -129,33 +160,99 @@ const LithiumPresale = ({ onStake }) => {
       alignItems="center"
     >
       <VStack spacing={[3, 4, 6]} align="center" w="100%">
-        <Text fontSize={["24px", "26px", "30px"]} fontWeight="500" textAlign="center">
+        <Text
+          fontSize={["24px", "26px", "30px"]}
+          fontWeight="500"
+          textAlign="center"
+        >
           Lithium Ecosystem Presale
         </Text>
 
         {/* Display the dynamically calculated USD Raised */}
-        <Text fontSize={["16px", "18px", "20px"]} fontWeight="500" textAlign="center">
-          $USD RAISED: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalUsdRaised)}
+        <Text
+          fontSize={["16px", "18px", "20px"]}
+          fontWeight="500"
+          textAlign="center"
+        >
+          $USD RAISED:{" "}
+          {new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+          }).format(totalUsdRaised)}
         </Text>
 
-
         <Box w="100%">
-          <Progress value={raisedPercentage} size="sm" w="100%" h="20px" isAnimated hasStripe />
-          <Text fontSize={["sm", "md", "sm"]} color="white" textAlign="center" mt={4}>
+          <Progress
+            value={raisedPercentage}
+            size="sm"
+            w="100%"
+            h="20px"
+            isAnimated
+            hasStripe
+          />
+          <Text
+            fontSize={["sm", "md", "sm"]}
+            color="white"
+            textAlign="center"
+            mt={4}
+          >
             Raised {raisedPercentage.toFixed(2)}%
           </Text>
         </Box>
 
         <VStack w="100%" align="start">
-          <Text fontSize={["16px", "18px", "18px"]} fontWeight="500" textAlign="left">
+          <Text
+            fontSize={["16px", "18px", "18px"]}
+            fontWeight="500"
+            textAlign="left"
+          >
             Presale: 1 $Lithium = ${lithiumPriceUsd.toFixed(2)}
           </Text>
-          <Text fontSize={["16px", "18px", "18px"]} fontWeight="500" textAlign="left">
+          <Text
+            fontSize={["16px", "18px", "18px"]}
+            fontWeight="500"
+            textAlign="left"
+          >
             Listing: 1 $Lithium = $1.5
           </Text>
         </VStack>
 
         <Divider borderColor="#03910D" borderWidth="1.5px" w="100%" />
+
+        {/* Switch para cambiar la moneda */}
+        <FormControl display="flex" alignItems="center" w="100%" mt={4}>
+          <Flex align="center" w="100%">
+            {/* Etiqueta BNB */}
+            <Flex align="center">
+              <Image
+                src="/bnbIcon.svg"
+                alt="BNB Icon"
+                boxSize={["20px", "24px", "24px"]}
+                mr={2}
+              />
+              <Text>BNB</Text>
+            </Flex>
+
+            <Spacer />
+
+            {/* Switch */}
+            <Switch
+              id="currency-switch"
+              isChecked={currency === "ETH"}
+              onChange={handleCurrencyToggle}
+              colorScheme="green"
+              size="lg"
+            />
+
+            <Spacer />
+
+            {/* Etiqueta ETH con ícono */}
+            <Flex align="center">
+              <FaEthereum size={24} style={{ marginRight: "8px" }} />
+              <Text>ETH</Text>
+            </Flex>
+          </Flex>
+        </FormControl>
 
         <VStack spacing={[2, 3, 4]} w="100%">
           <Button
@@ -183,13 +280,23 @@ const LithiumPresale = ({ onStake }) => {
             disabled={!isPresaleActive}
             border="2px solid #08FD19"
             onClick={() => {
-              writeBuyTokensWithEth({
-                address: presaleContractInfo.address,
-                abi: presaleContractInfo.abi,
-                functionName: "buyTokensWithEth",
-                value: amount ? parseEther(amount) : 0,
-                gasLimit: 3000000,
-              });
+              if (currency === "BNB") {
+                writeBuyTokensWithBnb({
+                  address: presaleContractInfo.address,
+                  abi: presaleContractInfo.abi,
+                  functionName: "buyTokensWithBnb", // Asegúrate de que esta función exista en tu contrato
+                  value: amount ? parseEther(amount) : 0,
+                  gasLimit: 3000000,
+                });
+              } else {
+                writeBuyTokensWithEth({
+                  address: presaleContractInfo.address,
+                  abi: presaleContractInfo.abi,
+                  functionName: "buyTokensWithEth",
+                  value: amount ? parseEther(amount) : 0,
+                  gasLimit: 3000000,
+                });
+              }
             }}
             color="white"
             _hover={{ bg: "#00bfa3" }}
@@ -198,7 +305,15 @@ const LithiumPresale = ({ onStake }) => {
             fontSize={["14px", "16px", "18px"]}
             fontWeight="400"
             leftIcon={
-              <Image src="/bnbIcon.svg" alt="BNB Icon" boxSize={["16px", "18px", "18px"]} />
+              currency === "BNB" ? (
+                <Image
+                  src="/bnbIcon.svg"
+                  alt="BNB Icon"
+                  boxSize={["16px", "18px", "18px"]}
+                />
+              ) : (
+                <FaEthereum size={18} />
+              )
             }
           >
             Buy Presale & Stake
@@ -248,7 +363,7 @@ const LithiumPresale = ({ onStake }) => {
             fontWeight="400"
             h={["35px", "40px", "40px"]}
             w="100%"
-            placeholder="Enter Amount in BNB"
+            placeholder={`Enter Amount in ${currency}`}
           />
           <Input
             value={lithiumToReceive}
