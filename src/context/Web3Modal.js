@@ -1,7 +1,7 @@
 import { createWeb3Modal } from '@web3modal/wagmi/react';
 import { http, createConfig, WagmiProvider } from 'wagmi';
 import { bsc } from 'wagmi/chains';
-import { walletConnect } from "wagmi/connectors";
+import { injected } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
@@ -15,17 +15,22 @@ const metadata = {
   icons: ['https://avatars.githubusercontent.com/u/37784886'],
 };
 
-// Crear solo el conector de WalletConnect con showQrModal en fa
-let connectors = []
-connectors.push(walletConnect({ projectId, metadata, showQrModal: false })) // showQrModal must be false
+// Configurar el conector Injected para MetaMask
+let connectors = [];
+connectors.push(
+  injected({
+    name: "MetaMask", // Personaliza el nombre que aparecerá
+    shimDisconnect: true, // Recuerda el estado de conexión
+  })
+);
 
 const config = createConfig({
   chains: [bsc],
   transports: {
-    [bsc.id]: http()
+    [bsc.id]: http(),
   },
-  connectors
-})
+  connectors,
+});
 
 // Crear el Web3Modal para usar con el conector configurado
 createWeb3Modal({
