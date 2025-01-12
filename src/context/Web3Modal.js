@@ -1,12 +1,12 @@
 import { createWeb3Modal } from '@web3modal/wagmi/react';
 import { http, createConfig, WagmiProvider } from 'wagmi';
 import { bsc } from 'wagmi/chains';
-import { injected } from 'wagmi/connectors';
+import { injected, walletConnect } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 
-const projectId = 'bcf6660cebd5b5cefe37e05961e5e9f9';
+const projectId = 'bcf6660cebd5b5cefe37e05961e5e9f9'; // Cambia por tu propio Project ID de WalletConnect.
 
 const metadata = {
   name: 'Prestak',
@@ -15,14 +15,20 @@ const metadata = {
   icons: ['https://avatars.githubusercontent.com/u/37784886'],
 };
 
-// Configurar el conector Injected para MetaMask
-let connectors = [];
-connectors.push(
+// Configurar los conectores para MetaMask y TrustWallet
+const connectors = [
+  // Conector para MetaMask
   injected({
-    name: "MetaMask", // Personaliza el nombre que aparecerá
-    shimDisconnect: true, // Recuerda el estado de conexión
-  })
-);
+    name: "MetaMask",
+    shimDisconnect: true, // Recuerda si el usuario desconectó
+  }),
+  // Conector para TrustWallet usando WalletConnect
+  walletConnect({
+    projectId, // Tu Project ID de WalletConnect
+    metadata,
+    showQrModal: true, // Muestra el QR para TrustWallet
+  }),
+];
 
 const config = createConfig({
   chains: [bsc],
@@ -32,7 +38,7 @@ const config = createConfig({
   connectors,
 });
 
-// Crear el Web3Modal para usar con el conector configurado
+// Crear el Web3Modal con los conectores configurados
 createWeb3Modal({
   wagmiConfig: config,
   projectId,
